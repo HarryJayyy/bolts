@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useLocation } from 'wouter'
 import { 
   Save, 
   Download, 
@@ -25,7 +25,7 @@ import { useToast } from '../hooks/use-toast'
 
 export function DocumentEditor() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
+  const [location, navigate] = useLocation()
   const { toast } = useToast()
   const { 
     currentDocument, 

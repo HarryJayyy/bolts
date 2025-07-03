@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Outlet, Link } from 'react-router-dom'
+import { Link } from 'wouter'
 import { 
   Menu, 
   Search, 
@@ -25,7 +25,7 @@ import { Sheet, SheetContent, SheetTrigger } from '../ui/sheet'
 import { Sidebar } from './Sidebar'
 import { useAuth } from '../../contexts/AuthContext'
 
-export function AppLayout() {
+export function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user, logout } = useAuth()
 
@@ -141,7 +141,7 @@ export function AppLayout() {
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>

@@ -1,5 +1,4 @@
-import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { Route, Switch, Redirect, useLocation } from 'wouter'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { DocumentProvider } from './contexts/DocumentContext'
 import { Toaster } from './components/ui/toaster'
@@ -29,44 +28,53 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
   
   if (!user) {
-    return <Navigate to="/" replace />
+    return <Redirect to="/" />
   }
   
   return <>{children}</>
 }
 
-function AppRoutes() {
+function AppContent() {
+  const [location] = useLocation()
+  
+  // Handle nested app routes
+  if (location.startsWith('/app')) {
+    return (
+      <ProtectedRoute>
+        <DocumentProvider>
+          <AppLayout>
+            <Switch>
+              <Route path="/app" component={Dashboard} />
+              <Route path="/app/documents" component={DocumentList} />
+              <Route path="/app/documents/new" component={DocumentCreator} />
+              <Route path="/app/documents/:id" component={DocumentEditor} />
+              <Route path="/app/documents/:id/edit" component={DocumentEditor} />
+              <Route path="/app/analytics" component={Analytics} />
+              <Route path="/app/settings" component={Settings} />
+            </Switch>
+          </AppLayout>
+        </DocumentProvider>
+      </ProtectedRoute>
+    )
+  }
+  
   return (
-    <Routes>
-      <Route path="/" element={<Landing />} />
-      <Route path="/app" element={
-        <ProtectedRoute>
-          <DocumentProvider>
-            <AppLayout />
-          </DocumentProvider>
-        </ProtectedRoute>
-      }>
-        <Route index element={<Dashboard />} />
-        <Route path="documents" element={<DocumentList />} />
-        <Route path="documents/new" element={<DocumentCreator />} />
-        <Route path="documents/:id" element={<DocumentEditor />} />
-        <Route path="documents/:id/edit" element={<DocumentEditor />} />
-        <Route path="analytics" element={<Analytics />} />
-        <Route path="settings" element={<Settings />} />
+    <Switch>
+      <Route path="/" component={Landing} />
+      <Route>
+        <Redirect to="/" />
       </Route>
-    </Routes>
+    </Switch>
   )
 }
 
 function App() {
   return (
     <AuthProvider>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
-          <AppRoutes />
-          <Toaster />
-        </div>
-      </Router>
+      <div className="min-h-screen bg-gray-50">
+        <AppContent />
+        <Toaster />
+      </div>
     </AuthProvider>
   )
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation } from 'wouter'
 import { 
   FileText, 
   Zap, 
@@ -78,8 +78,9 @@ const documentTypes = [
 ]
 
 export function DocumentCreator() {
-  const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [location, navigate] = useLocation()
+  // Parse search params from location
+  const searchParams = new URLSearchParams(location.split('?')[1] || '')
   const { toast } = useToast()
   const { createDocument, parseFile, isLoading } = useDocument()
 
@@ -94,7 +95,7 @@ export function DocumentCreator() {
     if (typeParam && documentTypes.find(dt => dt.type === typeParam)) {
       setSelectedType(typeParam)
     }
-  }, [searchParams])
+  }, [location])
 
   const { getRootProps, getInputProps, isDragActive, acceptedFiles } = useDropzone({
     accept: {

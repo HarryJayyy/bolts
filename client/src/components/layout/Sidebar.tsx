@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'wouter'
 import { 
   Home, 
   FileText, 
@@ -32,7 +32,7 @@ const documentTypes = [
 ]
 
 export function Sidebar() {
-  const location = useLocation()
+  const [location] = useLocation()
   const { documents, usageStats } = useDocument()
   const { user } = useAuth()
 
@@ -69,7 +69,7 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-4 py-4 space-y-1">
         {navigation.map((item) => {
-          const isActive = location.pathname === item.href
+          const isActive = location === item.href
           return (
             <Link
               key={item.name}

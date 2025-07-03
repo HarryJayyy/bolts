@@ -24,12 +24,7 @@ const navigation = [
   { name: 'Settings', href: '/app/settings', icon: Settings },
 ]
 
-const documentTypes = [
-  { name: 'PRD', count: 3, color: 'bg-blue-500' },
-  { name: 'BRD', count: 2, color: 'bg-green-500' },
-  { name: 'Tech Spec', count: 1, color: 'bg-purple-500' },
-  { name: 'RFP', count: 0, color: 'bg-orange-500' },
-]
+
 
 export function Sidebar() {
   const [location] = useLocation()
@@ -117,23 +112,7 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Document Types */}
-      <div className="px-4 py-4 border-t border-gray-200">
-        <h3 className="text-sm font-medium text-gray-900 mb-3">Document Types</h3>
-        <div className="space-y-2">
-          {documentTypes.map((type) => (
-            <div key={type.name} className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <div className={cn("w-2 h-2 rounded-full", type.color)} />
-                <span className="text-sm text-gray-600">{type.name}</span>
-              </div>
-              <Badge variant="secondary" className="text-xs">
-                {type.count}
-              </Badge>
-            </div>
-          ))}
-        </div>
-      </div>
+
 
       {/* Usage Stats */}
       {user?.plan === 'pro' && (

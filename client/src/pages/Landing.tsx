@@ -1,5 +1,5 @@
-import React from 'react'
-import { Link } from 'wouter'
+import React, { useState } from 'react'
+import { Link, useLocation } from 'wouter'
 import { 
   FileText, 
   Zap, 
@@ -10,11 +10,17 @@ import {
   Sparkles,
   Clock,
   Target,
-  Layers
+  Layers,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
+import { Input } from '../components/ui/input'
+import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../hooks/use-toast'
 
 const features = [
   {
@@ -61,7 +67,125 @@ const benefits = [
   'Export to multiple formats (PDF, DOCX, etc.)'
 ]
 
+function AuthDialog({ isSignUp, onClose }: { isSignUp: boolean; onClose: () => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const { login, signup, isLoading, error } = useAuth()
+  const { toast } = useToast()
+  const [, navigate] = useLocation()
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    try {
+      if (isSignUp) {
+        await signup(name, email, password)
+      } else {
+        await login(email, password)
+      }
+      
+      toast({
+        title: "Success",
+        description: `${isSignUp ? 'Account created' : 'Signed in'} successfully!`
+      })
+      
+      onClose()
+      navigate('/app')
+    } catch (error) {
+      // Error is handled by the auth context
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {isSignUp && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Full Name
+          </label>
+          <Input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Enter your full name"
+            required
+          />
+        </div>
+      )}
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Email
+        </label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter your email"
+          required
+        />
+      </div>
+      
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Password
+        </label>
+        <div className="relative">
+          <Input
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter your password"
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-1/2 transform -translate-y-1/2"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-red-600 text-sm">{error}</div>
+      )}
+
+      {!isSignUp && (
+        <div className="text-sm text-gray-600">
+          Demo credentials: <strong>demo@loveletter.com</strong> / <strong>demo</strong>
+        </div>
+      )}
+
+      <Button 
+        type="submit" 
+        className="w-full" 
+        disabled={isLoading}
+        variant="gradient"
+      >
+        {isLoading ? 'Loading...' : (isSignUp ? 'Create Account' : 'Sign In')}
+      </Button>
+    </form>
+  )
+}
+
 export function Landing() {
+  const [showAuthDialog, setShowAuthDialog] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
+
+  const openSignIn = () => {
+    setIsSignUp(false)
+    setShowAuthDialog(true)
+  }
+
+  const openSignUp = () => {
+    setIsSignUp(true)
+    setShowAuthDialog(true)
+  }
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -77,11 +201,11 @@ export function Landing() {
               </span>
             </div>
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" asChild>
-                <Link to="/app">Sign In</Link>
+              <Button variant="ghost" onClick={openSignIn}>
+                Sign In
               </Button>
-              <Button variant="gradient" asChild>
-                <Link to="/app">Get Started</Link>
+              <Button variant="gradient" onClick={openSignUp}>
+                Get Started
               </Button>
             </div>
           </div>
@@ -109,11 +233,14 @@ export function Landing() {
               documents that save time and ensure consistency.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button size="lg" variant="gradient" className="text-lg px-8 py-3" asChild>
-                <Link to="/app">
-                  Start Creating Free
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
+              <Button 
+                size="lg" 
+                variant="gradient" 
+                className="text-lg px-8 py-3"
+                onClick={openSignUp}
+              >
+                Start Creating Free
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
               <Button size="lg" variant="outline" className="text-lg px-8 py-3">
                 Watch Demo
@@ -301,6 +428,50 @@ export function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* Authentication Dialog */}
+      <Dialog open={showAuthDialog} onOpenChange={setShowAuthDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {isSignUp ? 'Create your account' : 'Welcome back'}
+            </DialogTitle>
+            <DialogDescription>
+              {isSignUp 
+                ? 'Sign up to start creating amazing documents with AI assistance.'
+                : 'Sign in to access your document workspace.'
+              }
+            </DialogDescription>
+          </DialogHeader>
+          <AuthDialog 
+            isSignUp={isSignUp} 
+            onClose={() => setShowAuthDialog(false)} 
+          />
+          <div className="text-center text-sm text-gray-500 mt-4">
+            {isSignUp ? (
+              <span>
+                Already have an account?{' '}
+                <button 
+                  onClick={() => setIsSignUp(false)} 
+                  className="text-pink-600 hover:underline"
+                >
+                  Sign in
+                </button>
+              </span>
+            ) : (
+              <span>
+                Don't have an account?{' '}
+                <button 
+                  onClick={() => setIsSignUp(true)} 
+                  className="text-pink-600 hover:underline"
+                >
+                  Sign up
+                </button>
+              </span>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

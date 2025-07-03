@@ -37,7 +37,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const [location] = useLocation()
   
-  // Handle nested app routes
+  // Handle document editor routes (full screen, no sidebar)
+  if (location.match(/^\/app\/documents\/[^\/]+(?:\/edit)?$/)) {
+    return (
+      <ProtectedRoute>
+        <DocumentProvider>
+          <Switch>
+            <Route path="/app/documents/:id" component={DocumentEditor} />
+            <Route path="/app/documents/:id/edit" component={DocumentEditor} />
+          </Switch>
+        </DocumentProvider>
+      </ProtectedRoute>
+    )
+  }
+  
+  // Handle other app routes with sidebar
   if (location.startsWith('/app')) {
     return (
       <ProtectedRoute>
@@ -47,8 +61,6 @@ function AppContent() {
               <Route path="/app" component={Dashboard} />
               <Route path="/app/documents" component={DocumentList} />
               <Route path="/app/documents/new" component={DocumentCreator} />
-              <Route path="/app/documents/:id" component={DocumentEditor} />
-              <Route path="/app/documents/:id/edit" component={DocumentEditor} />
               <Route path="/app/analytics" component={Analytics} />
               <Route path="/app/settings" component={Settings} />
             </Switch>

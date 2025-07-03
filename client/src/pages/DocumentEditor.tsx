@@ -68,10 +68,22 @@ export function DocumentEditor() {
 
     try {
       await updateDocument(currentDocument.id, { title, content })
+      
+      // Auto-create version on save
+      const newVersion = {
+        id: Date.now().toString(),
+        version: versions.length + 1,
+        title,
+        content,
+        timestamp: new Date().toISOString(),
+        author: user?.name || 'Unknown'
+      }
+      setVersions(prev => [newVersion, ...prev])
+      
       setHasUnsavedChanges(false)
       toast({
         title: "Document saved",
-        description: "Your changes have been saved successfully"
+        description: `Saved and created version ${newVersion.version}`
       })
     } catch (error) {
       toast({
@@ -97,6 +109,19 @@ export function DocumentEditor() {
 
     try {
       await generateContent(currentDocument.id, userMessage)
+      
+      // Auto-create version after AI generation
+      const newVersion = {
+        id: Date.now().toString(),
+        version: versions.length + 1,
+        title,
+        content,
+        timestamp: new Date().toISOString(),
+        author: user?.name || 'Unknown',
+        changes: `AI generated content from prompt: "${userMessage}"`
+      }
+      setVersions(prev => [newVersion, ...prev])
+      
     } catch (error) {
       toast({
         title: "Error",
@@ -119,40 +144,90 @@ export function DocumentEditor() {
   const handleExport = (format: string) => {
     if (!currentDocument) return
     
-    const exportContent = `# ${title}\n\n${content}`
-    const blob = new Blob([exportContent], { type: 'text/plain' })
+    let exportContent = `# ${title}\n\n${content}`
+    let mimeType = 'text/plain'
+    let fileExtension = format
+    
+    if (format === 'pdf') {
+      // For PDF, we'll use HTML content that can be printed to PDF
+      exportContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>${title}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 2cm; line-height: 1.6; }
+            h1 { color: #333; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+            h2 { color: #555; margin-top: 30px; }
+            p { margin-bottom: 15px; }
+          </style>
+        </head>
+        <body>
+          <h1>${title}</h1>
+          <div>${content.replace(/\n/g, '<br>')}</div>
+        </body>
+        </html>
+      `
+      mimeType = 'text/html'
+      fileExtension = 'html'
+    } else if (format === 'docx') {
+      // For Word docs, we'll create a simple HTML that can be opened by Word
+      exportContent = `
+        <!DOCTYPE html>
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+        <head>
+          <meta charset="utf-8">
+          <title>${title}</title>
+          <!--[if gte mso 9]>
+          <xml>
+            <w:WordDocument>
+              <w:View>Print</w:View>
+              <w:Zoom>90</w:Zoom>
+              <w:DoNotPromptForConvert/>
+              <w:DoNotShowMarkupDialog/>
+            </w:WordDocument>
+          </xml>
+          <![endif]-->
+          <style>
+            body { font-family: 'Times New Roman', serif; margin: 1in; }
+            h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; }
+            p { font-size: 12pt; margin-bottom: 12pt; }
+          </style>
+        </head>
+        <body>
+          <h1>${title}</h1>
+          <div>${content.replace(/\n/g, '<br>')}</div>
+        </body>
+        </html>
+      `
+      mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      fileExtension = 'doc'
+    } else if (format === 'gdoc') {
+      // For Google Docs, we'll create a link that opens in Google Docs
+      const googleDocsUrl = `https://docs.google.com/document/create?title=${encodeURIComponent(title)}&body=${encodeURIComponent(content)}`
+      window.open(googleDocsUrl, '_blank')
+      toast({
+        title: "Opening in Google Docs",
+        description: "Document opened in a new tab"
+      })
+      return
+    }
+    
+    const blob = new Blob([exportContent], { type: mimeType })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${title || 'document'}.${format}`
+    a.download = `${title || 'document'}.${fileExtension}`
     a.click()
     URL.revokeObjectURL(url)
     
     toast({
       title: "Document exported",
-      description: `Downloaded as ${format.toUpperCase()}`
+      description: `Downloaded as ${format === 'docx' ? 'Word Document' : format.toUpperCase()}`
     })
   }
 
-  const createVersion = async () => {
-    if (!currentDocument) return
-    
-    const newVersion = {
-      id: Date.now().toString(),
-      version: versions.length + 1,
-      title,
-      content,
-      timestamp: new Date().toISOString(),
-      author: user?.name || 'Unknown'
-    }
-    
-    setVersions(prev => [newVersion, ...prev])
-    
-    toast({
-      title: "Version created",
-      description: `Version ${newVersion.version} saved`
-    })
-  }
+
 
   const restoreVersion = (version: any) => {
     setTitle(version.title)
@@ -219,15 +294,13 @@ export function DocumentEditor() {
                 <div className="p-2">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-medium">Version History</span>
-                    <Button size="sm" variant="outline" onClick={createVersion}>
-                      Create Version
-                    </Button>
+                    <span className="text-xs text-gray-500">Auto-saved</span>
                   </div>
                   {versions.length === 0 ? (
-                    <p className="text-sm text-gray-500 py-2">No versions saved</p>
+                    <p className="text-sm text-gray-500 py-2">No versions yet. Versions are created automatically when you save or use AI.</p>
                   ) : (
-                    <div className="space-y-1">
-                      {versions.slice(0, 5).map((version) => (
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {versions.slice(0, 10).map((version) => (
                         <div
                           key={version.id}
                           className="p-2 rounded hover:bg-gray-50 cursor-pointer"
@@ -242,6 +315,11 @@ export function DocumentEditor() {
                           <p className="text-xs text-gray-600 truncate">
                             {version.title}
                           </p>
+                          {version.changes && (
+                            <p className="text-xs text-gray-500 truncate mt-1">
+                              {version.changes}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -260,14 +338,14 @@ export function DocumentEditor() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => handleExport('txt')}>
-                  Export as TXT
+                <DropdownMenuItem onClick={() => handleExport('pdf')}>
+                  Export as PDF
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('md')}>
-                  Export as Markdown
+                <DropdownMenuItem onClick={() => handleExport('docx')}>
+                  Export as Word Document
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleExport('html')}>
-                  Export as HTML
+                <DropdownMenuItem onClick={() => handleExport('gdoc')}>
+                  Open in Google Docs
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

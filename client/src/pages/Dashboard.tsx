@@ -1,282 +1,287 @@
-import React from 'react'
-import { Link } from 'wouter'
-import { 
-  Plus, 
-  FileText, 
-  Clock, 
-  TrendingUp, 
-  Users, 
-  Zap,
-  ArrowRight,
-  MoreHorizontal,
-  Star,
-  Calendar
-} from 'lucide-react'
+import React, { useState, useRef } from 'react'
+import { Send, Upload, FileText, Paperclip } from 'lucide-react'
 import { Button } from '../components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { Textarea } from '../components/ui/textarea'
+import { Card } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
-import { Progress } from '../components/ui/progress'
 import { useDocument } from '../contexts/DocumentContext'
 import { useAuth } from '../contexts/AuthContext'
-import { formatRelativeTime } from '../lib/utils'
+import { DocumentType } from '../types'
+import { toast } from '../hooks/use-toast'
+import { useLocation } from 'wouter'
 
 export function Dashboard() {
-  const { documents, usageStats } = useDocument()
+  const [, navigate] = useLocation()
   const { user } = useAuth()
+  const { createDocument, addChatMessage, parseFile } = useDocument()
+  const [message, setMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const recentDocuments = documents.slice(0, 5)
-  const stats = [
-    {
-      title: 'Total Documents',
-      value: documents.length,
-      icon: FileText,
-      change: '+12%',
-      changeType: 'positive' as const
-    },
-    {
-      title: 'AI Generations',
-      value: usageStats.aiGenerations,
-      icon: Zap,
-      change: '+23%',
-      changeType: 'positive' as const
-    },
-    {
-      title: 'Words Generated',
-      value: usageStats.wordsGenerated.toLocaleString(),
-      icon: TrendingUp,
-      change: '+18%',
-      changeType: 'positive' as const
-    },
-    {
-      title: 'Hours Saved',
-      value: usageStats.timesSaved,
-      icon: Clock,
-      change: '+15%',
-      changeType: 'positive' as const
-    }
-  ]
+  const handleSend = async () => {
+    if (!message.trim() && uploadedFiles.length === 0) return
 
-  const quickActions = [
-    {
-      title: 'Product Requirements Document',
-      description: 'Define product features and specifications',
-      icon: FileText,
-      color: 'bg-blue-500',
-      href: '/app/documents/new?type=prd'
-    },
-    {
-      title: 'Business Requirements Document',
-      description: 'Outline business needs and objectives',
-      icon: Users,
-      color: 'bg-green-500',
-      href: '/app/documents/new?type=brd'
-    },
-    {
-      title: 'Technical Specification',
-      description: 'Detail technical implementation',
-      icon: Zap,
-      color: 'bg-purple-500',
-      href: '/app/documents/new?type=tech-spec'
+    setIsLoading(true)
+    
+    try {
+      let prompt = message.trim()
+      let documentType: DocumentType = 'prd'
+      
+      // If files are uploaded, use them as context
+      if (uploadedFiles.length > 0) {
+        const fileContents = await Promise.all(
+          uploadedFiles.map(async (file) => {
+            const text = await file.text()
+            return `File: ${file.name}\n${text}`
+          })
+        )
+        prompt = `Based on these files:\n\n${fileContents.join('\n\n')}\n\nUser request: ${prompt}`
+      }
+      
+      // Determine document type from prompt
+      if (prompt.toLowerCase().includes('brd') || prompt.toLowerCase().includes('business requirement')) {
+        documentType = 'brd'
+      } else if (prompt.toLowerCase().includes('tech') || prompt.toLowerCase().includes('technical')) {
+        documentType = 'tech-spec'
+      } else if (prompt.toLowerCase().includes('rfp') || prompt.toLowerCase().includes('request for proposal')) {
+        documentType = 'rfp'
+      } else if (prompt.toLowerCase().includes('sop') || prompt.toLowerCase().includes('standard operating')) {
+        documentType = 'sop'
+      } else if (prompt.toLowerCase().includes('test') || prompt.toLowerCase().includes('testing')) {
+        documentType = 'test-plan'
+      } else if (prompt.toLowerCase().includes('deployment') || prompt.toLowerCase().includes('deploy')) {
+        documentType = 'deployment-guide'
+      } else if (prompt.toLowerCase().includes('frd') || prompt.toLowerCase().includes('functional requirement')) {
+        documentType = 'frd'
+      }
+
+      // Create document
+      const document = await createDocument(documentType, prompt)
+      
+      // Add initial chat message
+      addChatMessage({
+        role: 'user',
+        content: message
+      })
+
+      // Navigate to editor
+      navigate(`/app/documents/${document.id}`)
+      
+    } catch (error) {
+      console.error('Error creating document:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create document. Please try again.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+      setMessage('')
+      setUploadedFiles([])
     }
-  ]
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSend()
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    
+    const files = Array.from(e.dataTransfer.files).filter(file => 
+      file.type.includes('text') || 
+      file.name.endsWith('.md') || 
+      file.name.endsWith('.txt') || 
+      file.name.endsWith('.pdf') || 
+      file.name.endsWith('.docx')
+    )
+    
+    if (files.length > 0) {
+      setUploadedFiles(prev => [...prev, ...files])
+      toast({
+        title: "Files uploaded",
+        description: `${files.length} file(s) added as context`
+      })
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setUploadedFiles(prev => [...prev, ...files])
+      toast({
+        title: "Files uploaded",
+        description: `${files.length} file(s) added as context`
+      })
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index))
+  }
 
   return (
-    <div className="p-6 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Welcome back, {user?.name?.split(' ')[0]}!
+    <div className="h-screen flex flex-col bg-white">
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col justify-center items-center px-4 py-8">
+        {/* Welcome Message */}
+        <div className="text-center mb-8 max-w-2xl">
+          <div className="flex items-center justify-center mb-4">
+            <div className="w-12 h-12 bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-lg">L</span>
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            Welcome back, {user?.name}
           </h1>
-          <p className="text-gray-600 mt-1">
-            Here's what's happening with your documents today.
+          <p className="text-gray-600 text-lg">
+            What document would you like to create today?
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-3">
-          <Button variant="outline" asChild>
-            <Link to="/app/documents">
-              View All Documents
-            </Link>
-          </Button>
-          <Button variant="gradient" asChild>
-            <Link to="/app/documents/new">
-              <Plus className="h-4 w-4 mr-2" />
-              New Document
-            </Link>
-          </Button>
-        </div>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-md transition-shadow">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
-                {stat.title}
-              </CardTitle>
-              <stat.icon className="h-4 w-4 text-gray-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-              <div className="flex items-center space-x-1 text-xs text-green-600">
-                <TrendingUp className="h-3 w-3" />
-                <span>{stat.change} from last month</span>
+        {/* Example prompts */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 w-full max-w-4xl">
+          <Card 
+            className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => setMessage("Create a PRD for a new mobile app that helps users track their fitness goals")}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                <FileText className="h-4 w-4 text-blue-600" />
               </div>
-            </CardContent>
+              <div>
+                <h3 className="font-medium text-gray-900">Product Requirements</h3>
+                <p className="text-sm text-gray-500">Create a PRD for a new product</p>
+              </div>
+            </div>
           </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Quick Actions */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Zap className="h-5 w-5 mr-2 text-yellow-500" />
-                Quick Actions
-              </CardTitle>
-              <CardDescription>
-                Start creating documents with AI assistance
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {quickActions.map((action, index) => (
-                <Link
-                  key={index}
-                  to={action.href}
-                  className="flex items-center p-4 rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-sm transition-all group"
-                >
-                  <div className={`w-10 h-10 rounded-lg ${action.color} flex items-center justify-center mr-4`}>
-                    <action.icon className="h-5 w-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900 group-hover:text-gray-700">
-                      {action.title}
-                    </h3>
-                    <p className="text-sm text-gray-500">{action.description}</p>
-                  </div>
-                  <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-gray-600" />
-                </Link>
-              ))}
-            </CardContent>
+          
+          <Card 
+            className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => setMessage("Write a technical specification for a REST API with authentication")}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                <FileText className="h-4 w-4 text-green-600" />
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-900">Technical Specs</h3>
+                <p className="text-sm text-gray-500">Define technical requirements</p>
+              </div>
+            </div>
+          </Card>
+          
+          <Card 
+            className="p-4 cursor-pointer hover:shadow-md transition-shadow"
+            onClick={() => setMessage("Create an RFP for a new website development project")}
+          >
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                <FileText className="h-4 w-4 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="font-medium text-gray-900">RFP Document</h3>
+                <p className="text-sm text-gray-500">Request for proposals</p>
+              </div>
+            </div>
           </Card>
         </div>
 
-        {/* Usage Overview */}
-        <div className="space-y-6">
-          {/* Plan Usage */}
-          {user?.plan === 'pro' && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Star className="h-5 w-5 mr-2 text-yellow-500" />
-                  Plan Usage
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>AI Generations</span>
-                    <span>{usageStats.aiGenerations}/100</span>
-                  </div>
-                  <Progress value={(usageStats.aiGenerations / 100) * 100} />
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Documents</span>
-                    <span>{documents.length}/50</span>
-                  </div>
-                  <Progress value={(documents.length / 50) * 100} />
-                </div>
-                <Button variant="outline" size="sm" className="w-full">
-                  Upgrade Plan
-                </Button>
-              </CardContent>
-            </Card>
+        {/* Chat Input */}
+        <div className="w-full max-w-4xl">
+          {/* File Upload Area */}
+          <div 
+            className={`border-2 border-dashed rounded-lg p-8 text-center mb-4 transition-colors ${
+              dragOver 
+                ? 'border-pink-400 bg-pink-50' 
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <Upload className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+            <p className="text-sm text-gray-600 mb-2">
+              Drop files here or click to upload
+            </p>
+            <p className="text-xs text-gray-500">
+              Supports: TXT, MD, PDF, DOCX files
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".txt,.md,.pdf,.docx"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="mt-2"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="h-4 w-4 mr-2" />
+              Choose Files
+            </Button>
+          </div>
+
+          {/* Uploaded Files */}
+          {uploadedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-4">
+              {uploadedFiles.map((file, index) => (
+                <Badge
+                  key={index}
+                  variant="secondary"
+                  className="cursor-pointer hover:bg-gray-200"
+                  onClick={() => removeFile(index)}
+                >
+                  {file.name} ×
+                </Badge>
+              ))}
+            </div>
           )}
 
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Clock className="h-5 w-5 mr-2 text-blue-500" />
-                Recent Activity
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {recentDocuments.map((doc) => (
-                <div key={doc.id} className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <FileText className="h-4 w-4 text-gray-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <Link 
-                      to={`/app/documents/${doc.id}`}
-                      className="text-sm font-medium text-gray-900 hover:text-gray-700 truncate block"
-                    >
-                      {doc.title}
-                    </Link>
-                    <div className="flex items-center space-x-2 text-xs text-gray-500">
-                      <Badge variant="secondary" className="text-xs">
-                        {doc.type.toUpperCase()}
-                      </Badge>
-                      <span>•</span>
-                      <span>{formatRelativeTime(doc.updatedAt)}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <Button variant="ghost" size="sm" className="w-full" asChild>
-                <Link to="/app/documents">
-                  View All Documents
-                  <ArrowRight className="h-3 w-3 ml-1" />
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+          {/* Message Input */}
+          <div className="relative">
+            <Textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Describe the document you want to create..."
+              className="min-h-[100px] pr-12 resize-none border-2 border-gray-300 focus:border-pink-500"
+              disabled={isLoading}
+            />
+            <Button
+              onClick={handleSend}
+              disabled={(!message.trim() && uploadedFiles.length === 0) || isLoading}
+              className="absolute bottom-2 right-2 h-8 w-8 p-0 bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 hover:from-pink-600 hover:via-red-600 hover:to-yellow-600"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          <p className="text-xs text-gray-500 mt-2 text-center">
+            Press Enter to send, Shift+Enter for new line
+          </p>
         </div>
       </div>
-
-      {/* Tips & Getting Started */}
-      <Card className="bg-gradient-to-r from-pink-50 to-yellow-50 border-pink-200">
-        <CardHeader>
-          <CardTitle className="text-pink-800">💡 Pro Tips</CardTitle>
-          <CardDescription className="text-pink-700">
-            Get the most out of Loveletter with these helpful tips
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-pink-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-pink-700">1</span>
-            </div>
-            <div>
-              <p className="text-sm text-pink-800 font-medium">Be specific with your prompts</p>
-              <p className="text-xs text-pink-600">The more detailed your initial prompt, the better the AI-generated content will be.</p>
-            </div>
-          </div>
-          <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-pink-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-pink-700">2</span>
-            </div>
-            <div>
-              <p className="text-sm text-pink-800 font-medium">Use the chat feature for refinements</p>
-              <p className="text-xs text-pink-600">After generating initial content, use the chat to make specific improvements and additions.</p>
-            </div>
-          </div>
-          <div className="flex items-start space-x-3">
-            <div className="w-6 h-6 bg-pink-200 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-xs font-bold text-pink-700">3</span>
-            </div>
-            <div>
-              <p className="text-sm text-pink-800 font-medium">Save templates for recurring documents</p>
-              <p className="text-xs text-pink-600">Create templates from your best documents to speed up future creation.</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

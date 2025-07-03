@@ -59,10 +59,9 @@ function AppContent() {
           <AppLayout>
             <Switch>
               <Route path="/app" component={Dashboard} />
+              <Route path="/app/dashboard" component={Dashboard} />
               <Route path="/app/documents" component={DocumentList} />
               <Route path="/app/documents/new" component={DocumentCreator} />
-              <Route path="/app/analytics" component={Analytics} />
-              <Route path="/app/settings" component={Settings} />
             </Switch>
           </AppLayout>
         </DocumentProvider>
